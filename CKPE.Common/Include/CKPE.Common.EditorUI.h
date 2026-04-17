@@ -36,6 +36,7 @@ namespace CKPE
 			constexpr static std::uint32_t UI_EDITOR_DUPLICATE_AND_RENAME = 0xA0BF;
 			constexpr static std::uint32_t UI_EDITOR_COPY_EDITOR_ID = 0xA0BE;
 			constexpr static std::uint32_t UI_EDITOR_COPY_FORM_ID = 0xA0BD;
+			constexpr static std::uint32_t UI_EDITOR_SHOW_SOURCE_FILES = 0xA0BC;
 
 			constexpr static std::uint32_t UI_EDITOR_TOOLBAR = 1;
 			constexpr static std::uint32_t UI_EDITOR_STATUSBAR = 40139;

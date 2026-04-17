@@ -1,0 +1,31 @@
+{
+  "Style": [ "DS_CENTER", "WS_SYSMENU", "WS_THICKFRAME", "DS_MODALFRAME", "WS_CAPTION" ],
+  "Title": "Source File(s)",
+  "Width": 380,
+  "Height": 200,
+  "FontName": "Microsoft Sans Serif",
+  "FontSize": 8,
+  "FontWeight": 400,
+  "FontItalic": 0,
+  "Controls": [
+    {
+      "ExStyle": [ "WS_EX_CLIENTEDGE" ],
+      "Type": "LISTVIEW",
+      "Id": 100,
+      "Style": [ "LVS_REPORT", "LVS_SHOWSELALWAYS", "WS_BORDER", "WS_HSCROLL", "WS_VSCROLL" ],
+      "x": 4,
+      "y": 4,
+      "Width": 372,
+      "Height": 172
+    },
+    {
+      "Type": "DEFPUSHBUTTON",
+      "Title": "Close",
+      "Id": 2,
+      "x": 306,
+      "y": 183,
+      "Width": 70,
+      "Height": 14
+    }
+  ]
+}

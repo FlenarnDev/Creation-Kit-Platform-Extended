@@ -21,9 +21,114 @@
 #include <Patches/CKPE.Fallout4.Patch.ObjectWindow.h>
 #include <commctrl.h>
 
-#define UI_OBJECT_WINDOW_CHECKBOX			6329
-#define UI_OBJECT_WINDOW_ADD_ITEM			2579
-#define UI_CMD_CHANGE_SPLITTER_OBJECTWINDOW	(WM_USER + 34400)
+#define UI_OBJECT_WINDOW_CHECKBOX				6329
+#define UI_OBJECT_WINDOW_ADD_ITEM				2579
+#define UI_CMD_CHANGE_SPLITTER_OBJECTWINDOW		(WM_USER + 34400)
+
+// Control IDs for the Source File(s) dialog (dialog template ID 30100 in the FO4 dialogs pak)
+#define IDC_SFD_LISTVIEW						100
+
+struct SourceFileEntry
+{
+	std::string formLabel;
+	std::string fileName;
+	bool isActive;
+};
+
+static void ResizeSourceFilesDlgControls(HWND hDlg) noexcept(true)
+{
+	RECT rc;
+	GetClientRect(hDlg, &rc);
+
+	const int margin = 5, btnH = 22, btnW = 75, spacing = 4;
+
+	HWND hLV = GetDlgItem(hDlg, IDC_SFD_LISTVIEW);
+	HWND hClose = GetDlgItem(hDlg, IDCANCEL);
+
+	if (hLV)
+		SetWindowPos(hLV, nullptr, margin, margin,
+			rc.right - 2 * margin,
+			rc.bottom - 2 * margin - btnH - spacing,
+			SWP_NOZORDER | SWP_NOACTIVATE);
+
+	if (hClose)
+		SetWindowPos(hClose, nullptr,
+			rc.right - btnW - margin,
+			rc.bottom - btnH - margin,
+			btnW, btnH, SWP_NOZORDER | SWP_NOACTIVATE);
+}
+
+static INT_PTR CALLBACK SourceFilesDlgProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)
+{
+	switch (uMsg)
+	{
+	case WM_INITDIALOG:
+	{
+		SetWindowLongPtrA(hDlg, GWLP_USERDATA, lParam);
+
+		auto hLV = GetDlgItem(hDlg, IDC_SFD_LISTVIEW);
+		if (!hLV) return TRUE;
+
+		// Setup ListView columns
+		LVCOLUMNA col{};
+		col.mask = LVCF_TEXT | LVCF_WIDTH | LVCF_SUBITEM;
+
+		col.iSubItem = 0; col.cx = 140; col.pszText = (LPSTR)"Form";
+		ListView_InsertColumn(hLV, 0, &col);
+		col.iSubItem = 1; col.cx = 200; col.pszText = (LPSTR)"File";
+		ListView_InsertColumn(hLV, 1, &col);
+		col.iSubItem = 2; col.cx = 60; col.pszText = (LPSTR)"Active";
+		ListView_InsertColumn(hLV, 2, &col);
+
+		ListView_SetExtendedListViewStyleEx(hLV,
+			LVS_EX_FULLROWSELECT | LVS_EX_DOUBLEBUFFER,
+			LVS_EX_FULLROWSELECT | LVS_EX_DOUBLEBUFFER);
+
+		// Fill rows from supplied data
+		auto pEntries = reinterpret_cast<std::vector<SourceFileEntry>*>(lParam);
+		if (pEntries)
+		{
+			int row = 0;
+			for (auto& e : *pEntries)
+			{
+				LVITEMA item{};
+				item.mask = LVIF_TEXT;
+				item.iItem = row;
+				item.pszText = (LPSTR)e.formLabel.c_str();
+				ListView_InsertItem(hLV, &item);
+				ListView_SetItemText(hLV, row, 1, (LPSTR)e.fileName.c_str());
+				ListView_SetItemText(hLV, row, 2, (LPSTR)(e.isActive ? "Yes" : "No"));
+				row++;
+			}
+		}
+
+		return TRUE;
+	}
+	case WM_SIZE:
+		ResizeSourceFilesDlgControls(hDlg);
+		return TRUE;
+	case WM_GETMINMAXINFO:
+	{
+		auto pMMI = reinterpret_cast<LPMINMAXINFO>(lParam);
+		pMMI->ptMinTrackSize.x = 300;
+		pMMI->ptMinTrackSize.y = 200;
+		return TRUE;
+	}
+	case WM_COMMAND:
+		switch (LOWORD(wParam))
+		{
+		case IDOK:
+		case IDCANCEL:
+			EndDialog(hDlg, LOWORD(wParam));
+			return TRUE;
+		}
+		break;
+	case WM_CLOSE:
+		EndDialog(hDlg, IDCANCEL);
+		return TRUE;
+	}
+	return FALSE;
+}
 
 namespace CKPE
 {
@@ -445,6 +550,65 @@ namespace CKPE
 
 						return S_OK;
 					}
+					else if (param == Common::EditorUI::UI_EDITOR_SHOW_SOURCE_FILES)
+					{
+						auto ItemList = GetDlgItem(Hwnd, 1041);
+						CKPE_ASSERT(ItemList);
+
+						if (!ListView_GetSelectedCount(ItemList))
+						{
+							MessageBox::OpenInfo("No item is selected in the Object Window.");
+							return S_OK;
+						}
+
+						std::vector<SourceFileEntry> entries;
+
+						int idx = -1;
+						while ((idx = ListView_GetNextItem(ItemList, idx, LVNI_SELECTED)) != -1)
+						{
+							LVITEMA lvItem{};
+							lvItem.mask = LVIF_PARAM;
+							lvItem.iItem = idx;
+							if (!ListView_GetItem(ItemList, &lvItem) || !lvItem.lParam)
+								continue;
+
+							auto form = reinterpret_cast<EditorAPI::Forms::TESForm*>(lvItem.lParam);
+							if (!form)
+								continue;
+
+							std::string formLabel;
+							auto editorID = form->EditorID;
+							if (editorID && editorID[0])
+								formLabel = editorID;
+							else
+							{
+								char szFormID[12]{};
+								sprintf_s(szFormID, "%08X", form->FormID);
+								formLabel = szFormID;
+							}
+
+							auto mods = form->GetModInfo();
+							if (mods && mods->size)
+							{
+								for (std::uint32_t i = 0; i < mods->size; i++)
+								{
+									auto mod = mods->entries[i];
+									if (mod)
+										entries.push_back({ formLabel, mod->GetFileName().c_str(), mod->IsActive() });
+								}
+							}
+							else
+								entries.push_back({ formLabel, "UNKNOWN", false });
+						}
+
+						if (!entries.empty())
+							Common::EditorUI::Hook::HKDialogBoxParamA(GetModuleHandleA(nullptr),
+								MAKEINTRESOURCE(30100), Hwnd,
+								(std::uintptr_t)SourceFilesDlgProc,
+								reinterpret_cast<std::ptrdiff_t>(&entries));
+
+						return S_OK;
+					}
 				}
 				else if (Message == UI_OBJECT_WINDOW_ADD_ITEM)
 				{
@@ -560,6 +724,8 @@ namespace CKPE
 							{
 								InsertMenuA(hMenu, i + 1, MF_BYPOSITION | MF_STRING, Common::EditorUI::UI_EDITOR_COPY_EDITOR_ID, "Copy Editor ID");
 								InsertMenuA(hMenu, i + 2, MF_BYPOSITION | MF_STRING, Common::EditorUI::UI_EDITOR_COPY_FORM_ID, "Copy Form ID");
+								InsertMenuA(hMenu, i + 3, MF_BYPOSITION | MF_SEPARATOR, 0, nullptr);
+								InsertMenuA(hMenu, i + 4, MF_BYPOSITION | MF_STRING, Common::EditorUI::UI_EDITOR_SHOW_SOURCE_FILES, "See Source File(s)...");
 								break;
 							}
 						}
